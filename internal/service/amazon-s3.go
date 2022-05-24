@@ -81,7 +81,6 @@ func (c *client) S3Download(fp http.ResponseWriter, bucket, key string, rangeHea
 	}
 
 	_, err := d.download()
-
 	return err
 }
 
