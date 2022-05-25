@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -73,10 +74,12 @@ func (c *client) S3Download(fp http.ResponseWriter, bucket, key string, rangeHea
 	d.totalBytes = -1
 	if d.cfg.Concurrency == 0 {
 		d.cfg.Concurrency = DefaultDownloadConcurrency
+		fmt.Println("download concurrency ", DefaultDownloadConcurrency)
 	}
 
 	if d.cfg.PartSize == 0 {
 		d.cfg.PartSize = DefaultDownloadPartSize
+		fmt.Println("download part size ", DefaultDownloadPartSize)
 	}
 
 	_, err := d.download()
@@ -166,8 +169,6 @@ func (d *downloader) tryDownloadChunk(in *s3.GetObjectInput, w *dlchunk) (int64,
 	d.setTotalBytes(resp) // Set total if not yet set.
 	var n int64
 	for d.index != w.num {
-		// wait before index data writen.
-		// time.Sleep(1 * time.Microsecond)
 		if d.index == w.num {
 			n, err = io.Copy(w, resp.Body)
 			resp.Body.Close()
@@ -177,6 +178,8 @@ func (d *downloader) tryDownloadChunk(in *s3.GetObjectInput, w *dlchunk) (int64,
 			atomic.AddInt64(&d.index, 1)
 			break
 		}
+		// wait before index data writen.
+		time.Sleep(1 * time.Microsecond)
 	}
 	if d.index == w.num {
 		n, err = io.Copy(w, resp.Body)
