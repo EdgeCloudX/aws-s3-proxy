@@ -9,7 +9,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -166,20 +165,9 @@ func (d *downloader) tryDownloadChunk(in *s3.GetObjectInput, w *dlchunk) (int64,
 	}
 	d.setTotalBytes(resp) // Set total if not yet set.
 	var n int64
-
-	if d.index == w.num {
-		n, err = io.Copy(w, resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			return n, err
-		}
-		atomic.AddInt64(&d.index, 1)
-		return n, nil
-	}
-
 	for d.index != w.num {
 		// wait before index data writen.
-		time.Sleep(1 * time.Microsecond)
+		// time.Sleep(1 * time.Microsecond)
 		if d.index == w.num {
 			n, err = io.Copy(w, resp.Body)
 			resp.Body.Close()
@@ -189,6 +177,15 @@ func (d *downloader) tryDownloadChunk(in *s3.GetObjectInput, w *dlchunk) (int64,
 			atomic.AddInt64(&d.index, 1)
 			break
 		}
+	}
+	if d.index == w.num {
+		n, err = io.Copy(w, resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return n, err
+		}
+		atomic.AddInt64(&d.index, 1)
+		return n, nil
 	}
 
 	return n, nil

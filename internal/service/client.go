@@ -4,20 +4,18 @@ import (
 	"context"
 	"net/http"
 
-	"runtime"
-
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 )
 
 // DefaultDownloadPartSize is the default range of bytes to get at a time when
 // using Download().
-const DefaultDownloadPartSize = 1024 * 1024 * 100
+const DefaultDownloadPartSize = 1024 * 1024 * 1000
 
 // DefaultDownloadConcurrency is the default number of goroutines to spin up
 // when using Download().
 
-var DefaultDownloadConcurrency = runtime.NumCPU()
+var DefaultDownloadConcurrency = 3
 
 // AWS is a service to interact with original AWS services
 type AWS interface {
