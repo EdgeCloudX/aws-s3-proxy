@@ -9,7 +9,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -179,7 +178,7 @@ func (d *downloader) tryDownloadChunk(in *s3.GetObjectInput, w *dlchunk) (int64,
 			break
 		}
 		// wait before index data writen.
-		time.Sleep(1 * time.Microsecond)
+		// time.Sleep(1 * time.Microsecond)
 	}
 	if d.index == w.num {
 		n, err = io.Copy(w, resp.Body)
