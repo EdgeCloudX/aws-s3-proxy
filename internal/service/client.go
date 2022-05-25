@@ -12,7 +12,7 @@ import (
 
 // DefaultDownloadPartSize is the default range of bytes to get at a time when
 // using Download().
-const DefaultDownloadPartSize = 1024 * 1024 * 168
+const DefaultDownloadPartSize = 1024 * 1024 * 100
 
 // DefaultDownloadConcurrency is the default number of goroutines to spin up
 // when using Download().
