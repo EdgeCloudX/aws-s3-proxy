@@ -65,7 +65,9 @@ func AwsS3(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get a S3 object
-	if obj, err := client.S3get(c.S3Bucket, c.S3KeyPrefix+path, rangeHeader); err == nil {
+	obj, err := client.S3get(c.S3Bucket, c.S3KeyPrefix+path, rangeHeader)
+	defer obj.Body.Close()
+	if err == nil {
 		setHeadersFromAwsResponse(w, obj, c.HTTPCacheControl, c.HTTPExpires)
 		if err := client.S3Download(w, c.S3Bucket, c.S3KeyPrefix+path, rangeHeader); err != nil {
 			code, message := toHTTPError(err)

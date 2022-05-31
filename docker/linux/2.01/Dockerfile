@@ -7,7 +7,7 @@ RUN git config --global http.version HTTP/1.1
 RUN go env -w GOPROXY="https://goproxy.cn,direct" 
 RUN git clone https://github.com/Bamboer/aws-s3-proxy.git
 WORKDIR aws-s3-proxy
-ENV APP_VERSION=v2.0.2
+ENV APP_VERSION=v2.0.4
 RUN git checkout "${APP_VERSION}" > /dev/null 2>&1
 RUN go mod download
 RUN go mod verify
