@@ -4,7 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"golang.org/x/sync/errgroup"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strconv"
@@ -64,20 +68,79 @@ func AwsS3(w http.ResponseWriter, r *http.Request) {
 		path += c.IndexDocument
 	}
 
-	// Get a S3 object
-	obj, err := client.S3get(c.S3Bucket, c.S3KeyPrefix+path, rangeHeader)
-	defer obj.Body.Close()
-	if err == nil {
-		setHeadersFromAwsResponse(w, obj, c.HTTPCacheControl, c.HTTPExpires)
-		if err := client.S3Download(w, c.S3Bucket, c.S3KeyPrefix+path, rangeHeader); err != nil {
+	if r.Method == "POST" {
+		fmt.Println("upload file start: ", path)
+		pr, pw := io.Pipe()
+		tee := io.TeeReader(r.Body, pw)
+		var g errgroup.Group
+		g.Go(func() error {
+			_, err := client.S3upload(c.S3Bucket, c.S3KeyPrefix+path, pr)
+			if err != nil {
+				return err
+			}
+			return nil
+		})
+		g.Go(func() error {
+			tmp := filepath.Join(config.Config.TempPath, filepath.Dir(c.S3KeyPrefix+path))
+			err := os.MkdirAll(tmp, 0777)
+			if err != nil {
+				fmt.Println(err)
+				return err
+			}
+			cacheFile := filepath.Join(config.Config.TempPath, c.S3KeyPrefix+path)
+			file, err := os.OpenFile(cacheFile, os.O_RDWR|os.O_CREATE, 0777)
+			if err != nil {
+				return err
+			}
+			contentLen := r.Header.Get("File-Content-Length")
+			parseInt, _ := strconv.ParseInt(contentLen, 10, 64)
+			_, err = io.CopyN(file, tee, parseInt)
+			defer pw.Close()
+			if err != nil {
+				fmt.Println("copy error: ", err)
+				os.Remove(cacheFile)
+				return err
+			}
+			return nil
+		})
+		err := g.Wait()
+		if err != nil {
 			code, message := toHTTPError(err)
 			http.Error(w, message, code)
 			return
 		}
-	} else {
-		code, message := toHTTPError(err)
-		http.Error(w, message, code)
+		fmt.Println("upload file success: ", path)
 		return
+
+	} else {
+
+		cacheFile := filepath.Join(config.Config.TempPath, c.S3KeyPrefix+path)
+		_, err := os.Stat(cacheFile)
+		if err == nil {
+			file, _ := os.OpenFile(cacheFile, os.O_RDONLY, 0777)
+			_, err = io.Copy(w, file)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			} else {
+				os.Remove(cacheFile)
+			}
+			return
+		}
+		// Get a S3 object
+		obj, err := client.S3get(c.S3Bucket, c.S3KeyPrefix+path, rangeHeader)
+		defer obj.Body.Close()
+		if err == nil {
+			setHeadersFromAwsResponse(w, obj, c.HTTPCacheControl, c.HTTPExpires)
+			if err := client.S3Download(w, c.S3Bucket, c.S3KeyPrefix+path, rangeHeader); err != nil {
+				code, message := toHTTPError(err)
+				http.Error(w, message, code)
+				return
+			}
+		} else {
+			code, message := toHTTPError(err)
+			http.Error(w, message, code)
+			return
+		}
 	}
 }
 

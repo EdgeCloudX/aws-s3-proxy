@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"io"
 	"net/http"
 	"strconv"
@@ -84,6 +85,19 @@ func (c *client) S3Download(fp http.ResponseWriter, bucket, key string, rangeHea
 
 	_, err := d.download()
 	return err
+}
+
+func (c *client) S3upload(bucket, key string, reader io.Reader) (output *s3manager.UploadOutput, err error) {
+	uploader := s3manager.NewUploader(c.session, func(u *s3manager.Uploader) {
+		u.PartSize = s3manager.MinUploadPartSize
+		u.LeavePartsOnError = true
+	})
+
+	return uploader.Upload(&s3manager.UploadInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+		Body:   reader,
+	})
 }
 
 type downloader struct {
