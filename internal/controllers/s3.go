@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"golang.org/x/sync/errgroup"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -69,13 +70,15 @@ func AwsS3(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == "POST" {
-		fmt.Println("upload file start: ", path)
+		log.Printf("upload file start: %s", path)
 		pr, pw := io.Pipe()
 		tee := io.TeeReader(r.Body, pw)
 		var g errgroup.Group
 		g.Go(func() error {
 			_, err := client.S3upload(c.S3Bucket, c.S3KeyPrefix+path, pr)
 			if err != nil {
+				log.Printf("S3upload error: %s", err.Error())
+				pw.Close()
 				return err
 			}
 			return nil
@@ -84,7 +87,7 @@ func AwsS3(w http.ResponseWriter, r *http.Request) {
 			tmp := filepath.Join(config.Config.TempPath, filepath.Dir(c.S3KeyPrefix+path))
 			err := os.MkdirAll(tmp, 0777)
 			if err != nil {
-				fmt.Println(err)
+				log.Printf("MkdirAll error: %s", err.Error())
 				return err
 			}
 			cacheFile := filepath.Join(config.Config.TempPath, c.S3KeyPrefix+path)
@@ -97,7 +100,7 @@ func AwsS3(w http.ResponseWriter, r *http.Request) {
 			_, err = io.CopyN(file, tee, parseInt)
 			defer pw.Close()
 			if err != nil {
-				fmt.Println("copy error: ", err)
+				log.Printf("copy error: %s", err)
 				os.Remove(cacheFile)
 				return err
 			}
@@ -109,7 +112,7 @@ func AwsS3(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, message, code)
 			return
 		}
-		fmt.Println("upload file success: ", path)
+		log.Printf("upload file success: %s", path)
 		return
 
 	} else {
@@ -128,8 +131,8 @@ func AwsS3(w http.ResponseWriter, r *http.Request) {
 		}
 		// Get a S3 object
 		obj, err := client.S3get(c.S3Bucket, c.S3KeyPrefix+path, rangeHeader)
-		defer obj.Body.Close()
 		if err == nil {
+			defer obj.Body.Close()
 			setHeadersFromAwsResponse(w, obj, c.HTTPCacheControl, c.HTTPExpires)
 			if err := client.S3Download(w, c.S3Bucket, c.S3KeyPrefix+path, rangeHeader); err != nil {
 				code, message := toHTTPError(err)

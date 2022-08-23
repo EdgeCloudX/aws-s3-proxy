@@ -4,11 +4,11 @@
 FROM golang:1.13.7-alpine3.11 AS builder
 RUN apk --no-cache add gcc musl-dev git
 RUN git config --global http.version HTTP/1.1
-RUN go env -w GOPROXY="https://goproxy.cn,direct" 
-RUN git clone https://github.com/Bamboer/aws-s3-proxy.git
+# RUN go env -w GOPROXY="https://goproxy.cn,direct"
+ADD . aws-s3-proxy
 WORKDIR aws-s3-proxy
-ENV APP_VERSION=v2.0.4
-RUN git checkout "${APP_VERSION}" > /dev/null 2>&1
+ENV APP_VERSION=v2.0.5
+#RUN git checkout "${APP_VERSION}" > /dev/null 2>&1
 RUN go mod download
 RUN go mod verify
 RUN githash=$(git rev-parse --short HEAD 2>/dev/null) \
