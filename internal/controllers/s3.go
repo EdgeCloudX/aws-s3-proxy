@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"golang.org/x/sync/errgroup"
 	"io"
 	"log"
 	"net/http"
@@ -16,9 +15,12 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/go-openapi/swag"
+
 	"github.com/pottava/aws-s3-proxy/internal/config"
 	"github.com/pottava/aws-s3-proxy/internal/service"
 )
@@ -71,19 +73,9 @@ func AwsS3(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == "POST" {
 		log.Printf("upload file start: %s", path)
-		pr, pw := io.Pipe()
-		tee := io.TeeReader(r.Body, pw)
 		var g errgroup.Group
 		g.Go(func() error {
-			_, err := client.S3upload(c.S3Bucket, c.S3KeyPrefix+path, pr)
-			if err != nil {
-				log.Printf("S3upload error: %s", err.Error())
-				pw.Close()
-				return err
-			}
-			return nil
-		})
-		g.Go(func() error {
+			// cache file
 			tmp := filepath.Join(config.Config.TempPath, filepath.Dir(c.S3KeyPrefix+path))
 			err := os.MkdirAll(tmp, 0777)
 			if err != nil {
@@ -97,11 +89,16 @@ func AwsS3(w http.ResponseWriter, r *http.Request) {
 			}
 			contentLen := r.Header.Get("File-Content-Length")
 			parseInt, _ := strconv.ParseInt(contentLen, 10, 64)
-			_, err = io.CopyN(file, tee, parseInt)
-			defer pw.Close()
+			_, err = io.CopyN(file, r.Body, parseInt)
 			if err != nil {
 				log.Printf("copy error: %s", err)
 				os.Remove(cacheFile)
+				return err
+			}
+			// use Minio sdk upload
+			_, err = client.MinioUpload(c.S3Bucket, c.S3KeyPrefix+path, cacheFile)
+			if err != nil {
+				log.Printf("S3 MinioUpload error: %s", err.Error())
 				return err
 			}
 			return nil
