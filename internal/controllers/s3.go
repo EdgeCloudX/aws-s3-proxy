@@ -15,8 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/sync/errgroup"
-
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/go-openapi/swag"
@@ -73,46 +71,38 @@ func AwsS3(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == "POST" {
 		log.Printf("upload file start: %s", path)
-		var g errgroup.Group
-		g.Go(func() error {
-			// cache file
-			tmp := filepath.Join(config.Config.TempPath, filepath.Dir(c.S3KeyPrefix+path))
-			err := os.MkdirAll(tmp, 0777)
-			if err != nil {
-				log.Printf("MkdirAll error: %s", err.Error())
-				return err
-			}
-			cacheFile := filepath.Join(config.Config.TempPath, c.S3KeyPrefix+path)
-			file, err := os.OpenFile(cacheFile, os.O_RDWR|os.O_CREATE, 0777)
-			if err != nil {
-				return err
-			}
-			contentLen := r.Header.Get("File-Content-Length")
-			parseInt, _ := strconv.ParseInt(contentLen, 10, 64)
-			_, err = io.CopyN(file, r.Body, parseInt)
-			if err != nil {
-				log.Printf("copy error: %s", err)
-				os.Remove(cacheFile)
-				return err
-			}
-			// use Minio sdk upload
-			_, err = client.MinioUpload(c.S3Bucket, c.S3KeyPrefix+path, cacheFile)
-			if err != nil {
-				log.Printf("S3 MinioUpload error: %s", err.Error())
-				return err
-			}
-			_, err = client.S3Header(c.S3Bucket, c.S3KeyPrefix+path[:idx+12])
-			if err != nil {
-				log.Printf("S3 Header error: %s", err.Error())
-			}
-			return nil
-		})
-		err := g.Wait()
+		// cache file
+		tmp := filepath.Join(config.Config.TempPath, filepath.Dir(c.S3KeyPrefix+path))
+		err := os.MkdirAll(tmp, 0777)
 		if err != nil {
-			code, message := toHTTPError(err)
-			http.Error(w, message, code)
+			log.Printf("MkdirAll error: %s", err.Error())
 			return
 		}
+		cacheFile := filepath.Join(config.Config.TempPath, c.S3KeyPrefix+path)
+		file, err := os.OpenFile(cacheFile, os.O_RDWR|os.O_CREATE, 0777)
+		if err != nil {
+			log.Printf("open file error: %s", err.Error())
+			return
+		}
+		contentLen := r.Header.Get("File-Content-Length")
+		parseInt, _ := strconv.ParseInt(contentLen, 10, 64)
+		_, err = io.CopyN(file, r.Body, parseInt)
+		if err != nil {
+			log.Printf("copy error: %s", err)
+			os.Remove(cacheFile)
+			return
+		}
+		// use Minio sdk upload
+		_, err = client.MinioUpload(c.S3Bucket, c.S3KeyPrefix+path, cacheFile)
+		if err != nil {
+			log.Printf("S3 MinioUpload error: %s", err.Error())
+			return
+		}
+		_, err = client.S3Header(c.S3Bucket, c.S3KeyPrefix+path[:idx+12])
+		if err != nil {
+			log.Printf("S3 Header error: %s", err.Error())
+		}
+
 		log.Printf("upload file success: %s", path)
 		return
 
