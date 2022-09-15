@@ -101,6 +101,10 @@ func AwsS3(w http.ResponseWriter, r *http.Request) {
 				log.Printf("S3 MinioUpload error: %s", err.Error())
 				return err
 			}
+			_, err = client.S3Header(c.S3Bucket, c.S3KeyPrefix+path[:idx+12])
+			if err != nil {
+				log.Printf("S3 Header error: %s", err.Error())
+			}
 			return nil
 		})
 		err := g.Wait()

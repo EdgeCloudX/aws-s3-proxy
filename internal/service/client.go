@@ -33,6 +33,7 @@ type AWS interface {
 	S3listObjects(bucket, prefix string) (*s3.ListObjectsOutput, error)
 	S3upload(bucket, key string, reader io.Reader) (output *s3manager.UploadOutput, err error)
 	MinioUpload(bucketName, objectName, filePath string) (output minio.UploadInfo, err error)
+	S3Header(bucket, key string) (output *s3.HeadObjectOutput, err error)
 }
 
 type client struct {

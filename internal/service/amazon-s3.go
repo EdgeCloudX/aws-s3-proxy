@@ -109,6 +109,14 @@ func (c *client) MinioUpload(bucketName, objectName, filePath string) (output mi
 	return
 }
 
+func (c *client) S3Header(bucket, key string) (output *s3.HeadObjectOutput, err error) {
+	output, err = c.S3.HeadObject(&s3.HeadObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	})
+	return
+}
+
 type downloader struct {
 	context.Context
 	cfg                *client
