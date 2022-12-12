@@ -49,7 +49,6 @@ func NewClient(ctx context.Context, region *string, partSize int64, concurrency 
 	sess := awsSession(region)
 	endPoint := "https://" + *sess.Config.Endpoint
 	command := fmt.Sprintf("mc alias set s3 %s %s %s --api s3v4", endPoint, os.Getenv("AWS_ACCESS_KEY_ID"), os.Getenv("AWS_SECRET_ACCESS_KEY"))
-	log.Printf("mc init Command: %s", command)
 	// 需要执行的命令： free -mh
 	cmd := exec.Command("/bin/sh", "-c", command)
 
@@ -57,7 +56,7 @@ func NewClient(ctx context.Context, region *string, partSize int64, concurrency 
 	if err != nil {
 		log.Printf("mc init Command error: %s", err.Error())
 	}
-	log.Printf("shell result:%s", string(result))
+	log.Printf("init shell result:%s", string(result))
 	return &client{Context: ctx,
 		session:     sess,
 		S3:          s3.New(sess),

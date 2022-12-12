@@ -93,14 +93,13 @@ func AwsS3(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		command := fmt.Sprintf("mc cp %s s3/%s%s", cacheFile, c.S3Bucket, c.S3KeyPrefix+path)
-		log.Printf("mc upload Command: %s", command)
 		// 需要执行的命令
 		cmd := exec.Command("/bin/sh", "-c", command)
 		result, err := cmd.Output()
 		if err != nil {
 			log.Printf("mc upload Command error: %s", err.Error())
 		}
-		log.Printf("shell result:%s", string(result))
+		log.Printf("upload shell result:%s", string(result))
 		log.Printf("upload file success: %s", path)
 		return
 
