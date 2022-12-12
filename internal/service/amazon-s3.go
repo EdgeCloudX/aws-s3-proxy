@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"io"
 	"net/http"
 	"strconv"
@@ -12,10 +11,14 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/minio/minio-go/v7"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/awsutil"
 	"github.com/aws/aws-sdk-go/service/s3"
+
 	"github.com/pottava/aws-s3-proxy/internal/config"
 )
 
@@ -56,7 +59,7 @@ func (c *client) S3listObjects(bucket, prefix string) (*s3.ListObjectsOutput, er
 	return result, err
 }
 
-//S3 Parallel download a object
+// S3 Parallel download a object
 func (c *client) S3Download(fp http.ResponseWriter, bucket, key string, rangeHeader *string) error {
 	req := &s3.GetObjectInput{
 		Bucket: aws.String(bucket),
@@ -98,6 +101,19 @@ func (c *client) S3upload(bucket, key string, reader io.Reader) (output *s3manag
 		Key:    aws.String(key),
 		Body:   reader,
 	})
+}
+
+func (c *client) MinioUpload(bucket, key string, reader io.Reader, objectSize int64) (output minio.UploadInfo, err error) {
+	output, err = c.MinioClient.PutObject(context.Background(), bucket, key, reader, objectSize, minio.PutObjectOptions{ContentType: "application/octet-stream"})
+	return
+}
+
+func (c *client) S3Header(bucket, key string) (output *s3.HeadObjectOutput, err error) {
+	output, err = c.S3.HeadObject(&s3.HeadObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	})
+	return
 }
 
 type downloader struct {

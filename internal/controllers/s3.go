@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"golang.org/x/sync/errgroup"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -19,6 +19,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/go-openapi/swag"
+
 	"github.com/pottava/aws-s3-proxy/internal/config"
 	"github.com/pottava/aws-s3-proxy/internal/service"
 )
@@ -32,7 +33,6 @@ func AwsS3(w http.ResponseWriter, r *http.Request) {
 	if len(c.StripPath) > 0 {
 		path = strings.TrimPrefix(path, c.StripPath)
 	}
-
 	// If there is a health check path defined, and if this path matches it,
 	// then return 200 OK and return.
 	// Note: we want to apply the health check *after* the prefix is stripped.
@@ -71,47 +71,35 @@ func AwsS3(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == "POST" {
 		log.Printf("upload file start: %s", path)
-		pr, pw := io.Pipe()
-		tee := io.TeeReader(r.Body, pw)
-		var g errgroup.Group
-		g.Go(func() error {
-			_, err := client.S3upload(c.S3Bucket, c.S3KeyPrefix+path, pr)
-			if err != nil {
-				log.Printf("S3upload error: %s", err.Error())
-				pw.Close()
-				return err
-			}
-			return nil
-		})
-		g.Go(func() error {
-			tmp := filepath.Join(config.Config.TempPath, filepath.Dir(c.S3KeyPrefix+path))
-			err := os.MkdirAll(tmp, 0777)
-			if err != nil {
-				log.Printf("MkdirAll error: %s", err.Error())
-				return err
-			}
-			cacheFile := filepath.Join(config.Config.TempPath, c.S3KeyPrefix+path)
-			file, err := os.OpenFile(cacheFile, os.O_RDWR|os.O_CREATE, 0777)
-			if err != nil {
-				return err
-			}
-			contentLen := r.Header.Get("File-Content-Length")
-			parseInt, _ := strconv.ParseInt(contentLen, 10, 64)
-			_, err = io.CopyN(file, tee, parseInt)
-			defer pw.Close()
-			if err != nil {
-				log.Printf("copy error: %s", err)
-				os.Remove(cacheFile)
-				return err
-			}
-			return nil
-		})
-		err := g.Wait()
+		// cache file
+		tmp := filepath.Join(config.Config.TempPath, filepath.Dir(c.S3KeyPrefix+path))
+		err := os.MkdirAll(tmp, 0777)
 		if err != nil {
-			code, message := toHTTPError(err)
-			http.Error(w, message, code)
+			log.Printf("MkdirAll error: %s", err.Error())
 			return
 		}
+		cacheFile := filepath.Join(config.Config.TempPath, c.S3KeyPrefix+path)
+		file, err := os.OpenFile(cacheFile, os.O_RDWR|os.O_CREATE, 0777)
+		if err != nil {
+			log.Printf("open file error: %s", err.Error())
+			return
+		}
+		contentLen := r.Header.Get("File-Content-Length")
+		parseInt, _ := strconv.ParseInt(contentLen, 10, 64)
+		_, err = io.CopyN(file, r.Body, parseInt)
+		if err != nil {
+			log.Printf("copy error: %s", err)
+			os.Remove(cacheFile)
+			return
+		}
+		command := fmt.Sprintf("mc cp %s s3/%s%s", cacheFile, c.S3Bucket, c.S3KeyPrefix+path)
+		// 需要执行的命令
+		cmd := exec.Command("/bin/sh", "-c", command)
+		result, err := cmd.Output()
+		if err != nil {
+			log.Printf("mc upload Command error: %s", err.Error())
+		}
+		log.Printf("upload shell result:%s", string(result))
 		log.Printf("upload file success: %s", path)
 		return
 
