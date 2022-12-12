@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -32,7 +33,6 @@ func AwsS3(w http.ResponseWriter, r *http.Request) {
 	if len(c.StripPath) > 0 {
 		path = strings.TrimPrefix(path, c.StripPath)
 	}
-
 	// If there is a health check path defined, and if this path matches it,
 	// then return 200 OK and return.
 	// Note: we want to apply the health check *after* the prefix is stripped.
@@ -92,17 +92,15 @@ func AwsS3(w http.ResponseWriter, r *http.Request) {
 			os.Remove(cacheFile)
 			return
 		}
-		// use Minio sdk upload
-		_, err = client.MinioUpload(c.S3Bucket, c.S3KeyPrefix+path, cacheFile)
+		command := fmt.Sprintf("mc cp %s s3/%s%s", cacheFile, c.S3Bucket, c.S3KeyPrefix+path)
+		log.Printf("mc upload Command: %s", command)
+		// 需要执行的命令
+		cmd := exec.Command("/bin/sh", "-c", command)
+		result, err := cmd.Output()
 		if err != nil {
-			log.Printf("S3 MinioUpload error: %s", err.Error())
-			return
+			log.Printf("mc upload Command error: %s", err.Error())
 		}
-		_, err = client.S3Header(c.S3Bucket, c.S3KeyPrefix+path[:idx+12])
-		if err != nil {
-			log.Printf("S3 Header error: %s", err.Error())
-		}
-
+		log.Printf("shell result:%s", string(result))
 		log.Printf("upload file success: %s", path)
 		return
 

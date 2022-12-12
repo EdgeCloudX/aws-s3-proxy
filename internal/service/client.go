@@ -2,19 +2,18 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
-	"strings"
+	"os/exec"
 
 	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
-	"github.com/minio/minio-go/v7"
-	"github.com/minio/minio-go/v7/pkg/credentials"
-
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/minio/minio-go/v7"
 )
 
 // DefaultDownloadPartSize is the default range of bytes to get at a time when
@@ -32,7 +31,6 @@ type AWS interface {
 	S3Download(f http.ResponseWriter, bucket, key string, rangeHeader *string) error
 	S3listObjects(bucket, prefix string) (*s3.ListObjectsOutput, error)
 	S3upload(bucket, key string, reader io.Reader) (output *s3manager.UploadOutput, err error)
-	MinioUpload(bucketName, objectName, filePath string) (output minio.UploadInfo, err error)
 	S3Header(bucket, key string) (output *s3.HeadObjectOutput, err error)
 }
 
@@ -49,25 +47,21 @@ type client struct {
 // NewClient returns new AWS client
 func NewClient(ctx context.Context, region *string, partSize int64, concurrency int) AWS {
 	sess := awsSession(region)
-	// 删除endpoint的协议
-	endpoint := *sess.Config.Endpoint
-	if strings.Contains(endpoint, "http://") {
-		endpoint = strings.Trim(endpoint, "http://")
-	} else if strings.Contains(endpoint, "https://") {
-		endpoint = strings.Trim(endpoint, "https://")
-	}
-	minioClient, err := minio.New(endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(os.Getenv("AWS_ACCESS_KEY_ID"), os.Getenv("AWS_SECRET_ACCESS_KEY"), ""),
-		Secure: true,
-	})
+	endPoint := "https://" + *sess.Config.Endpoint
+	command := fmt.Sprintf("mc alias set s3 %s %s %s --api s3v4", endPoint, os.Getenv("AWS_ACCESS_KEY_ID"), os.Getenv("AWS_SECRET_ACCESS_KEY"))
+	log.Printf("mc init Command: %s", command)
+	// 需要执行的命令： free -mh
+	cmd := exec.Command("/bin/sh", "-c", command)
+
+	result, err := cmd.Output()
 	if err != nil {
-		log.Fatalf("create minioClient fail, err:%s", err.Error())
+		log.Printf("mc init Command error: %s", err.Error())
 	}
+	log.Printf("shell result:%s", string(result))
 	return &client{Context: ctx,
 		session:     sess,
 		S3:          s3.New(sess),
 		PartSize:    partSize,
 		Concurrency: concurrency,
-		MinioClient: minioClient,
 	}
 }

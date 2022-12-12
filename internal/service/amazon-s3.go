@@ -103,9 +103,8 @@ func (c *client) S3upload(bucket, key string, reader io.Reader) (output *s3manag
 	})
 }
 
-func (c *client) MinioUpload(bucketName, objectName, filePath string) (output minio.UploadInfo, err error) {
-	output, err = c.MinioClient.FPutObject(context.Background(), bucketName, objectName,
-		filePath, minio.PutObjectOptions{ContentType: "application/octet-stream"})
+func (c *client) MinioUpload(bucket, key string, reader io.Reader, objectSize int64) (output minio.UploadInfo, err error) {
+	output, err = c.MinioClient.PutObject(context.Background(), bucket, key, reader, objectSize, minio.PutObjectOptions{ContentType: "application/octet-stream"})
 	return
 }
 
